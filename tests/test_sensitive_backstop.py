@@ -46,3 +46,19 @@ def test_names_sensitive_topic_matches_whole_words_only():
     assert names_sensitive_topic("sleep") is True
     # "billing" must not match the "bill" keyword.
     assert names_sensitive_topic("billing system") is False
+
+
+def test_entity_name_alone_can_trigger_the_backstop():
+    """The model files money facts under an entity named for the topic:
+    entity "rent" with predicate "amount" and value "$2,400" mentions no
+    keyword in either field, so the entity name has to be checked too."""
+    fact = ExtractedFact(
+        subject="user",
+        predicate="amount",
+        value="$2,400",
+        entity="rent",
+        category="personal",
+        confidence=0.9,
+        evidence="paraphrase",
+    )
+    assert fact.sensitive is True

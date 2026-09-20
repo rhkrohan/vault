@@ -86,7 +86,7 @@ class ExtractedFact(BaseModel):
 
     def model_post_init(self, __context) -> None:
         if self.category in SENSITIVE_CATEGORIES or names_sensitive_topic(
-            self.predicate, self.value
+            self.predicate, self.value, self.entity
         ):
             object.__setattr__(self, "sensitive", True)
 
