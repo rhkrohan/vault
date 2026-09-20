@@ -41,6 +41,16 @@ def write_profile(conn: sqlite3.Connection, project_dir: Path) -> None:
     for row in rows:
         entity = db.get_entity(conn, row["entity_id"])
         entity_name = entity["name"] if entity else "?"
+        # A decision that belongs to a project is not identity. PRD 6.3 calls
+        # profile.md the hot tier of "identity and preferences", and this block
+        # is prepended to EVERY context block, so anything parked here is paid
+        # for on every single ask. Ingesting 260 conversations showed why the
+        # filter is needed: the hot tier filled with 33 project decisions
+        # ("language = zig (sched-compiler)", "rank = top-3 (kaggle-housing)")
+        # and spent its whole 300-token allowance before the scoped facts the
+        # question actually asked for were reached.
+        if entity is not None and entity["kind"] == "project":
+            continue
         line = f"- {row['predicate']} = {row['value']} ({entity_name})"
         candidate = budget_text + line + "\n"
         if count_tokens(candidate) > PROFILE_BUDGET:
