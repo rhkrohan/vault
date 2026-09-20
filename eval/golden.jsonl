@@ -1,0 +1,25 @@
+{"prompt": "What's a good practice for naming REST API endpoints?", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "Explain the difference between TCP and UDP.", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "Write a haiku about autumn leaves.", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "How do I center a div using flexbox?", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "What is Big O notation used for in complexity analysis?", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "Summarize the plot of Hamlet in two sentences.", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "Give me a simple recipe for banana bread.", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "How does garbage collection work in Python?", "scope": null, "expects_memory": false, "expected_entity_ids": [], "expected_keywords": []}
+{"prompt": "What team am I on for acme-platform right now?", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["infra", "team"]}
+{"prompt": "What auth provider are we using for acme-platform?", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["Clerk", "SSO"]}
+{"prompt": "Remind me what we decided about acme-platform authentication and why it changed.", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["Clerk", "sessions", "SSO"]}
+{"prompt": "What's the current status of my acme-platform project?", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["infra", "Clerk"]}
+{"prompt": "Continue where we left off on the acme-platform auth decision.", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["Clerk"]}
+{"prompt": "We decided on acme-platform auth last time -- what was it again?", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["Clerk", "sessions"]}
+{"prompt": "What database are we using for north-star?", "scope": "north-star", "expects_memory": true, "expected_entity_ids": ["north-star"], "expected_keywords": ["SQLite"]}
+{"prompt": "What's the schema for north-star look like?", "scope": "north-star", "expects_memory": true, "expected_entity_ids": ["north-star"], "expected_keywords": ["habits", "check_ins"]}
+{"prompt": "Remind me what habit I added to north-star recently.", "scope": "north-star", "expects_memory": true, "expected_entity_ids": ["north-star"], "expected_keywords": ["coffee", "2pm"]}
+{"prompt": "Is north-star still just exploratory or a real project now?", "scope": "north-star", "expects_memory": true, "expected_entity_ids": ["north-star"], "expected_keywords": ["weekend", "real"]}
+{"prompt": "My north-star habit tracker -- what's it for again?", "scope": "north-star", "expects_memory": true, "expected_entity_ids": ["north-star"], "expected_keywords": ["habit", "streak"]}
+{"prompt": "Who is Jordan Alvarez and what's her role?", "scope": null, "expects_memory": true, "expected_entity_ids": ["Jordan Alvarez"], "expected_keywords": ["engineering manager", "platform"]}
+{"prompt": "Did Jordan approve the Clerk migration plan?", "scope": "acme-platform", "expects_memory": true, "expected_entity_ids": ["acme-platform"], "expected_keywords": ["Jordan", "approved", "Clerk"]}
+{"prompt": "What did I say about my rent recently?", "scope": null, "expects_memory": true, "expected_entity_ids": [], "expected_keywords": ["rent", "2400"]}
+{"prompt": "How much is my rent now and did my budget change?", "scope": null, "expects_memory": true, "expected_entity_ids": [], "expected_keywords": ["rent", "budget"]}
+{"prompt": "What did the doctor say about my sleep and caffeine?", "scope": null, "expects_memory": true, "expected_entity_ids": [], "expected_keywords": ["caffeine", "2pm", "sleep"]}
+{"prompt": "What's my new caffeine cutoff habit again?", "scope": null, "expects_memory": true, "expected_entity_ids": [], "expected_keywords": ["coffee", "2pm"]}
