@@ -12,5 +12,6 @@ venv/
 *.db-shm
 inbox/real/
 .DS_Store
+.claude/scheduled_tasks.lock
 build/
 dist/
