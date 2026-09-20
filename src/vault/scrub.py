@@ -26,6 +26,10 @@ _JWT_RE = re.compile(r"\b[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{1
 _SSN_RE = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
 _DIGIT_RUN_RE = re.compile(r"\b\d{13,19}\b")
 _GENERIC_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/_=-]{32,}\b")
+# Checked against a token the generic pattern already matched, so it only has
+# to recognise the alphabet, not re-find the boundaries.
+_HEX_RUN_RE = re.compile(r"[0-9a-fA-F]{32,}")
+_HEX_ENTROPY_FLOOR = 3.0
 
 _ENTROPY_THRESHOLD = 4.0
 
@@ -87,6 +91,22 @@ def scrub(text: str) -> tuple[str, dict[str, int]]:
 
     def _entropy_replace(match: re.Match) -> str:
         token = match.group(0)
+        # A pure hex run is structurally incapable of tripping the entropy
+        # rule below: 16 symbols cap Shannon entropy at 4.0 bits/char, and a
+        # finite sample measures ~3.7-3.8, always under the "> 4.0" threshold
+        # PRD section 9 specifies. That silently exempted the single most
+        # common secret shape there is -- 32/48/64-character hex session and
+        # API tokens, which is exactly what a pasted Claude Code or ChatGPT
+        # transcript is full of. Length alone is the signal here; 32+ hex
+        # characters is never prose.
+        # The entropy floor matters: "aaaa...' is a valid hex run but is not a
+        # token, and redacting repetitive text would be a false positive. A
+        # random hex token measures ~3.7-4.0 bits/char, a repeated pattern
+        # well under 2.5, so 3.0 separates them cleanly while still sitting
+        # below anything the "> 4.0" generic rule could ever catch.
+        if _HEX_RUN_RE.fullmatch(token) and _shannon_entropy(token) >= _HEX_ENTROPY_FLOOR:
+            counts["hex_token"] = counts.get("hex_token", 0) + 1
+            return "[REDACTED:hex_token]"
         if _shannon_entropy(token) > _ENTROPY_THRESHOLD:
             counts["high_entropy_token"] = counts.get("high_entropy_token", 0) + 1
             return "[REDACTED:high_entropy_token]"

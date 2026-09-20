@@ -99,3 +99,43 @@ def test_true_negative_long_english_word_run_low_entropy():
     clean, counts = scrub(text)
     assert clean == text
     assert counts == {}
+
+
+def test_redacts_hex_token_that_entropy_rule_cannot_catch():
+    """A hex run cannot trip the entropy rule, so it needs its own.
+
+    Sixteen symbols cap Shannon entropy at 4.0 bits/char and a finite sample
+    measures ~3.7-3.8, always below PRD section 9's "> 4.0" threshold. Hex
+    session and API tokens are the most common secret shape in a pasted
+    transcript, so without this they reached memory/ untouched.
+    """
+    token = "9f3c1a7e40b26d58cc09e1f47a3b82d6"  # 32 hex characters
+    clean, counts = scrub(f"Authorization: Bearer {token}")
+    assert token not in clean
+    assert counts["hex_token"] == 1
+
+
+def test_redacts_long_hex_run_of_any_case():
+    token = "5E1B9D07AC42F83619BE7C05DA2F6841"  # 32 hex characters, uppercase
+    clean, counts = scrub(f"commit {token}")
+    assert token not in clean
+    assert counts["hex_token"] == 1
+
+
+def test_repetitive_hex_run_is_not_a_token():
+    """Length alone would fire on repeated text, which is a false positive.
+
+    "abababab..." is a valid hex run but carries no secret, so the rule
+    carries an entropy floor that a real random token clears easily.
+    """
+    text = "ab" * 24  # 48 hex characters, entropy 1.0
+    clean, counts = scrub(text)
+    assert clean == text
+    assert counts == {}
+
+
+def test_short_hex_is_left_alone():
+    """Length is the signal; ordinary short ids must survive untouched."""
+    clean, counts = scrub("the id is a3f91c04 and the port is 8000")
+    assert "a3f91c04" in clean
+    assert counts == {}
