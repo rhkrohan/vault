@@ -21,6 +21,7 @@ from pathlib import Path
 import typer
 
 from vault import db, mirror
+from vault.config import load_env
 from vault.extract import extract
 from vault.ingest import ParsedConversation
 from vault.ingest import chatgpt as chatgpt_ingest
@@ -31,6 +32,10 @@ from vault.providers.claude import ClaudeProvider
 from vault.retrieve import gate, pack, scope, search
 from vault.scrub import scrub
 from vault.supersede import apply_extraction
+
+# Read .env before anything below reads os.environ (DEFAULT_BUDGET does, at
+# import time). A real environment variable still wins over the file.
+load_env()
 
 app = typer.Typer(add_completion=False, help="Local memory that follows you across models.")
 
