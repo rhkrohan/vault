@@ -37,11 +37,12 @@ Two rules carry most of the value:
 | `vault ask` with gate, scope filter, budget packer and injection log | Built |
 | MCP server: vault_catalog, vault_search, vault_get, vault_remember | Built |
 | `vault eval` on 25 golden prompts | Built |
-| Hosted mode on GalaxyGate with a RunPod extraction endpoint | Pending (Session B, branch `hosted`; merges in Phase 3) |
+| Hosted mode: `providers/runpod.py` + FastAPI app (`/`, `/ingest`, `/ask`, `/audit`, `/health`) | Built and merged; verified locally end to end |
+| GalaxyGate server + RunPod serverless endpoint provisioned | Not provisioned -- needs the accounts and keys; see `deploy/README.md` |
+| Offline provider (`VAULT_PROVIDER=offline`) so the demo runs with no API key | Built |
 | RunPod embedding endpoint for hybrid search | Stretch |
 | macOS hotkey, browser extension, local models, encryption at rest | Roadmap |
 
-Update the Status column at submission time.
 
 ## How it works
 
@@ -76,8 +77,8 @@ flowchart TD
 
 | Layer | Choice | Why |
 | --- | --- | --- |
-| Language | Python 3.12 | Fast to build, easy to read, good static analysis |
-| Extraction model | Claude API (`claude-sonnet-5`) in local mode; open-weight model on a RunPod vLLM endpoint in hosted mode | Same JSON schema, swappable by one env var |
+| Language | Python 3.11 | Fast to build, easy to read, good static analysis |
+| Extraction model | Claude API (`claude-sonnet-5`) locally; an open-weight model on a RunPod vLLM endpoint when hosted; a deterministic rule-based `offline` provider for demos and CI | One JSON schema, swappable by one env var |
 | Store | SQLite with FTS5 | One file, portable, no server |
 | Retrieval | FTS5 bm25, scope filter, budget packer | Cheap, explainable, testable |
 | Agent interface | MCP Python SDK | Works with Claude Code, Cursor and any MCP client |
@@ -99,6 +100,24 @@ vault ask "what did we decide about auth?" --scope acme-platform
 vault eval                                      # gate accuracy, recall@5, precision@5, tokens
 vault serve-mcp                                 # stdio MCP server
 ```
+
+### No API key? Run the whole demo offline
+
+`VAULT_PROVIDER=offline` swaps extraction for a deterministic rule-based
+provider, so every command above works with no key and no network call:
+
+```bash
+export VAULT_PROVIDER=offline
+vault ingest inbox/synthetic --project .   # 9 facts, 2 superseded, 5 episodes
+vault ask "what did we decide about auth?" --scope acme-platform
+vault eval
+```
+
+It is not an extraction model and does not pretend to be one -- it is a
+published set of regexes over the transcript conventions in
+`inbox/synthetic`, and it never invents a fact it did not match. It exists
+so the tests, CI and a live demo never depend on a key being present. Set
+`VAULT_PROVIDER=claude` (with `ANTHROPIC_API_KEY`) for real extraction.
 
 Register the MCP server in Claude Code:
 
@@ -149,11 +168,17 @@ Secrets (API keys, card numbers, SSNs, high-entropy tokens) are scrubbed before 
 
 | Metric | Target | Result |
 | --- | --- | --- |
-| Gate accuracy | above 90 percent | fill in |
-| Recall@5 | above 80 percent | fill in |
-| Precision@5 | report | fill in |
-| Tokens injected, mean and p95 | p95 under 800 | fill in |
-| Sensitivity leaks | zero | fill in |
+| Gate accuracy | above 90 percent | **100.0 percent** |
+| Recall@5 | above 80 percent | **92.3 percent** |
+| Precision@5 | report | **56.4 percent** |
+| Tokens injected, mean | report | **111** |
+| Tokens injected, p95 | p95 under 800 | **156** |
+| Sensitivity leaks | zero | **zero** |
+| No 12-word transcript span in `memory/` | zero | **zero** (`tests/test_no_leaks.py`) |
+
+Measured on the 25-row golden set against the five synthetic transcripts,
+with `VAULT_PROVIDER=offline`. Reproduce with `vault ingest inbox/synthetic
+--project .` then `vault eval`.
 
 Results are written to `eval/results.md` on every run.
 
