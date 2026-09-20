@@ -1,5 +1,8 @@
 # Vault
 
+<img width="3456" height="2092" alt="image" src="https://github.com/user-attachments/assets/9657a35f-97f7-4241-b971-be9d8afaf2e7" />
+
+
 Local memory that follows you across every AI model and agent.
 
 Vault reads your AI conversations, turns them into durable facts about your projects and your life, and hands the smallest useful slice back to whatever model or agent you use next. It runs on your machine, writes into the memory folder of an XO Space project so every run is visible, and never copies a chat into a shared folder.
