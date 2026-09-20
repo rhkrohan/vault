@@ -1,0 +1,3 @@
+# Progress log
+
+- 2026-09-20T00:00:00 | orchestrator | Phase 0: pyproject/requirements pinned (Python 3.11, not 3.12 -- not installed on this machine, noted as a deviation), models.py/db.py/mirror.py/providers base+claude written per sections 6 and 10, tests/test_db.py green, four subagent files created, five synthetic transcripts generated covering acme-platform + north-star, person Jordan Alvarez, one finance mention (rent), one health mention (sleep/caffeine), and the team/auth decision that changes between transcript 2 and transcript 4. | next: run librarian, retriever, qa in parallel (Phase 1).
