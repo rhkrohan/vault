@@ -37,7 +37,7 @@ Two rules carry most of the value:
 | `vault ask` with gate, scope filter, budget packer and injection log | Built |
 | MCP server: vault_catalog, vault_search, vault_get, vault_remember | Built |
 | `vault eval` on 25 golden prompts | Built |
-| Hosted mode on GalaxyGate with a RunPod extraction endpoint | Built |
+| Hosted mode on GalaxyGate with a RunPod extraction endpoint | Pending (Session B, branch `hosted`; merges in Phase 3) |
 | RunPod embedding endpoint for hybrid search | Stretch |
 | macOS hotkey, browser extension, local models, encryption at rest | Roadmap |
 
@@ -104,6 +104,12 @@ Register the MCP server in Claude Code:
 
 ```bash
 claude mcp add vault -- python -m vault.mcp_server
+```
+
+Make sure `python` on `PATH` is the one from this project's virtualenv (the one with `vault`, `mcp` and `anthropic` installed) -- if `claude mcp list` shows `vault` as failed to connect, register it with the venv's absolute path instead:
+
+```bash
+claude mcp add vault -- "$(pwd)/.venv/bin/python" -m vault.mcp_server
 ```
 
 Then, inside a Claude Code session, the agent calls `vault_search` before planning and `vault_remember` when it learns something durable. The skill file in `skill/vault/SKILL.md` tells it when.
