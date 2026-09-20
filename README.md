@@ -1,4 +1,7 @@
-# Vault
+# Vault - Agentic Memory OS System
+
+<img width="3456" height="2092" alt="image" src="https://github.com/user-attachments/assets/9657a35f-97f7-4241-b971-be9d8afaf2e7" />
+
 
 Local memory that follows you across every AI model and agent.
 
@@ -200,7 +203,9 @@ Results are written to `eval/results.md` on every run.
 ## Team
 
 - Mubashir Panjwani
-- Add teammates here
+- Muhammad Rohan Khan
+- Ibrahim Raheel
+
 
 ## License
 
