@@ -3,6 +3,7 @@ stored rows that mirror the SQLite schema (section 6.2)."""
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -19,6 +20,41 @@ Category = Literal[
 ]
 
 SENSITIVE_CATEGORIES: set[str] = {"finances", "health"}
+
+# Backstop for the section 9 rule "sensitive categories are gated, never in
+# profile.md". That rule was enforced only through `category`, which an
+# extraction model assigns by judgment: running the synthetic transcripts
+# through Qwen2.5-7B, "sleep = badly" came back as category "personal", so
+# nothing marked it sensitive and it surfaced in the profile block.
+#
+# A fact whose predicate or value names a health or finance topic is treated
+# as sensitive regardless of the category the model chose. Only `sensitive`
+# is forced, not `category` -- the category still drives entity grouping, and
+# over-riding it would reshape the catalog on a keyword hit.
+#
+# These mirror retrieve/scope.py's prompt-side lists. They are duplicated
+# rather than imported because models.py is the lowest layer and must not
+# depend on the retrieval package.
+SENSITIVE_TOPIC_KEYWORDS: set[str] = {
+    # health
+    "sleep", "sleeping", "insomnia", "caffeine", "coffee", "health",
+    "healthy", "doctor", "medication", "medicine", "therapy", "therapist",
+    "exercise", "workout", "gym", "diet", "sick", "illness", "symptom",
+    "symptoms", "anxiety", "stress", "mental",
+    # finances
+    "rent", "mortgage", "salary", "paycheck", "income", "debt", "loan",
+    "loans", "savings", "invoice", "tax", "taxes", "bill", "bills",
+}
+
+_TOPIC_WORD_RE = re.compile(r"[a-z']+")
+
+
+def names_sensitive_topic(*fields: str) -> bool:
+    """True when any field mentions a health or finance topic."""
+    words: set[str] = set()
+    for field in fields:
+        words.update(_TOPIC_WORD_RE.findall((field or "").lower()))
+    return bool(words & SENSITIVE_TOPIC_KEYWORDS)
 
 SourceKind = Literal["claude_code", "chatgpt", "markdown", "remember", "web"]
 
@@ -49,7 +85,9 @@ class ExtractedFact(BaseModel):
     evidence: str = Field(max_length=120)
 
     def model_post_init(self, __context) -> None:
-        if self.category in SENSITIVE_CATEGORIES:
+        if self.category in SENSITIVE_CATEGORIES or names_sensitive_topic(
+            self.predicate, self.value
+        ):
             object.__setattr__(self, "sensitive", True)
 
 
