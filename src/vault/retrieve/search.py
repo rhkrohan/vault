@@ -21,7 +21,12 @@ def _entity_name(conn: sqlite3.Connection, entity_id: int) -> str:
     return row["name"] if row else "?"
 
 
-def _fact_item(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+# bm25 ranks are negative (smaller is better), so an explicitly worse-than-
+# any-match sentinel keeps scope-fallback facts below every real FTS hit.
+_FALLBACK_RANK = 1e6
+
+
+def _fact_item(conn: sqlite3.Connection, row: sqlite3.Row, rank: float | None = None) -> dict:
     return {
         "kind": "fact",
         "id": f"fact:{row['id']}",
@@ -32,7 +37,7 @@ def _fact_item(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
         "category": row["category"],
         "sensitive": bool(row["sensitive"]),
         "observed_at": row["observed_at"],
-        "rank": row["rank"],
+        "rank": row["rank"] if rank is None else rank,
     }
 
 
@@ -87,6 +92,19 @@ def search(
             episode_rows = []
 
     items = [_fact_item(conn, row) for row in fact_rows]
+
+    # Scope is a hard filter applied *before* ranking (PRD section 8), so the
+    # candidate set for a scoped ask is that entity's current facts and FTS
+    # only orders them. When the prompt's terms match none of those values
+    # -- "what's the architecture for acme-platform?" shares no token with
+    # "auth = Clerk" -- returning nothing would be wrong: the user named the
+    # entity, so its current facts are the answer. Ranked below real hits.
+    if scope_entity_id is not None and not items:
+        items = [
+            _fact_item(conn, row, rank=_FALLBACK_RANK)
+            for row in db.current_facts_for_entity(conn, scope_entity_id)
+        ]
+
     if not allow_sensitive:
         items = [item for item in items if not item["sensitive"]]
     items += [_episode_item(row) for row in episode_rows]

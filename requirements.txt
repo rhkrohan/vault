@@ -1,6 +1,10 @@
 anthropic==0.39.0
 pydantic==2.9.2
 typer==0.12.5
+# Transitive dep of typer, pinned explicitly: typer 0.12.5 calls click's
+# pre-8.2 Parameter.make_metavar() signature, so click>=8.2 breaks every
+# CLI command at import of the help formatter.
+click==8.1.8
 mcp==1.0.0
 fastapi==0.115.4
 uvicorn==0.32.0
