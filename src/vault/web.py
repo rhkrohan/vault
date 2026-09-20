@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from vault import __version__ as VAULT_VERSION
-from vault import db, mcp_http, mirror
+from vault import db, mcp_http, mirror, sources
 from vault.cli import DEFAULT_BUDGET, _build_provider, _mirror_touched, _run_ask
 from vault.extract import extract
 from vault.providers.base import ProviderError
@@ -233,6 +233,33 @@ def catalog() -> JSONResponse:
         conn.close()
 
 
+@app.get("/sources")
+def sources_list() -> JSONResponse:
+    """Which chat histories this machine can offer. Counts only, no content."""
+    return JSONResponse({"sources": sources.detect()})
+
+
+class SourceBody(BaseModel):
+    source: str
+
+
+@app.post("/sources/ingest")
+def sources_ingest(body: SourceBody) -> JSONResponse:
+    """Ingest one named source.
+
+    The id is looked up against a fixed table in sources.py; no path comes
+    from the request, so this cannot be pointed at an arbitrary file.
+    """
+    try:
+        result = sources.ingest_source(body.source, project_dir(), _build_provider())
+    except KeyError:
+        return JSONResponse({"error": f"unknown source: {body.source}"}, status_code=400)
+    except ProviderError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    result.pop("_failure_details", None)
+    return JSONResponse(result)
+
+
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
     """MCP over HTTP, so a hosted Claude or OpenAI client can use this store.
@@ -378,6 +405,16 @@ PAGE = """<!doctype html>
            color:var(--bg); font:inherit; font-weight:600; cursor:pointer; }
   button:hover { opacity:.88; }
   button:disabled { opacity:.5; cursor:progress; }
+  .src { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+          padding:10px 0; border-top:1px solid var(--sunk); }
+  .src:first-child { border-top:0; }
+  .src .meta { flex:1 1 240px; min-width:0; }
+  .src .nm { font-weight:600; font-size:13.5px; }
+  .src .dt { color:var(--muted); font-size:12.5px; }
+  .src button { margin-top:0; white-space:nowrap; }
+  .src .tag { font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+              text-transform:uppercase; color:var(--muted);
+              border:1px solid var(--line-2); border-radius:4px; padding:2px 7px; }
   .status { margin-top:11px; font-size:13.5px; min-height:19px; }
   .status.busy { color:var(--muted); } .status.ok { color:var(--ok);
   } .status.bad { color:var(--bad); }
@@ -431,7 +468,15 @@ PAGE = """<!doctype html>
   </div>
 
   <section>
-    <h2>1 &middot; Add a conversation</h2>
+    <h2>1 &middot; Connect a source</h2>
+    <p class="hint">Pull in chat history that is already on this machine.
+       Everything goes through the same scrub &rarr; extract &rarr; supersede
+       pipeline &mdash; secrets are redacted before anything is written.</p>
+    <div id="sources">Looking for sources&hellip;</div>
+  </section>
+
+  <section>
+    <h2>2 &middot; Add a conversation</h2>
     <p class="hint">Paste a chat transcript (or upload an export). Vault scrubs
        secrets, pulls out durable facts, and supersedes anything it already
        knew that has since changed.</p>
@@ -449,7 +494,7 @@ because we need SSO.&#10;&#10;## Assistant&#10;Noted."></textarea>
   </section>
 
   <section>
-    <h2>2 &middot; Ask</h2>
+    <h2>3 &middot; Ask</h2>
     <p class="hint">Returns the context block an agent would be given —
        nothing more than the token budget allows.</p>
     <form id="ask-form">
@@ -473,7 +518,7 @@ because we need SSO.&#10;&#10;## Assistant&#10;Noted."></textarea>
   </section>
 
   <section>
-    <h2>3 &middot; What Vault handed out</h2>
+    <h2>4 &middot; What Vault handed out</h2>
     <p class="hint">Every block Vault injects is logged here, newest first.</p>
     <div id="audit">Loading…</div>
   </section>
@@ -741,7 +786,46 @@ window.addEventListener("resize", () => {
   graphTimer = setTimeout(loadCatalog, 180);
 });
 
-loadCatalog(); loadAudit(); loadHealth();
+
+async function loadSources() {
+  const host = $("sources");
+  try {
+    const { sources } = await (await fetch("/sources")).json();
+    host.innerHTML = sources.map((s) => `
+      <div class="src">
+        <div class="meta">
+          <div class="nm">${s.label}</div>
+          <div class="dt">${s.detail}</div>
+        </div>
+        ${s.available
+          ? `<button data-src="${s.id}">Import ${s.sessions} sessions</button>`
+          : `<span class="tag">${s.upload_only ? "upload above" : "not on this machine"}</span>`}
+      </div>`).join("");
+    host.querySelectorAll("button[data-src]").forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.src;
+        b.disabled = true; b.textContent = "Importing\u2026";
+        try {
+          const res = await fetch("/sources/ingest", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: id }),
+          });
+          const data = await res.json();
+          b.textContent = data.error
+            ? "Failed"
+            : `+${data.facts_added} facts, ${data.secrets_redacted} secrets redacted`;
+          if (!data.error) { loadCatalog(); loadAudit(); }
+        } catch (err) {
+          b.textContent = "Failed";
+        }
+      };
+    });
+  } catch (err) {
+    host.textContent = "Could not check for sources.";
+  }
+}
+
+loadCatalog(); loadAudit(); loadHealth(); loadSources();
 </script>
 </body>
 </html>
