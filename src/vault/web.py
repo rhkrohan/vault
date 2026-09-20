@@ -112,11 +112,21 @@ def _ingest_text(text: str, label: str) -> dict:
 
 @app.get("/health")
 def health() -> JSONResponse:
-    """Active provider, endpoint reachability, db path, version."""
+    """Active provider, endpoint reachability, db path, version.
+
+    ``status`` and ``runpod_key_set`` are here because the GalaxyGate
+    deployment guide's verification step polls ``/health`` and asserts
+    exactly those two fields. Emitting them lets the guide's own check pass
+    against this app unmodified, in place of the demo it ships with.
+    ``runpod_key_set`` is a boolean presence check -- it never echoes the
+    key itself.
+    """
     home = db.default_vault_home()
     payload: dict = {
+        "status": "ok",
         "version": VAULT_VERSION,
         "provider": os.environ.get("VAULT_PROVIDER", "claude"),
+        "runpod_key_set": bool(os.environ.get("RUNPOD_API_KEY")),
         "db_path": str(home / "vault.db"),
         "db_exists": (home / "vault.db").exists(),
         "project_dir": str(project_dir().resolve()),
@@ -136,6 +146,7 @@ def health() -> JSONResponse:
         payload["db_error"] = str(exc)
 
     ok = bool(payload.get("endpoint", {}).get("ok")) and "db_error" not in payload
+    payload["status"] = "ok" if ok else "degraded"
     return JSONResponse(payload, status_code=200 if ok else 503)
 
 

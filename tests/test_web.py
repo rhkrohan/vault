@@ -202,3 +202,36 @@ def test_the_page_never_mentions_a_key_or_the_provider_url(client):
     page = client.get("/").text
     for forbidden in ("api.runpod.ai", "RUNPOD_API_KEY", "ANTHROPIC_API_KEY", "Bearer "):
         assert forbidden not in page
+
+
+# ---------------------------------------------------------------------------
+# GalaxyGate deployment-guide compatibility
+# ---------------------------------------------------------------------------
+
+
+def test_health_emits_the_fields_the_galaxygate_guide_checks(client):
+    """The guide's verification step polls /health and asserts exactly
+    "status":"ok" and "runpod_key_set":true."""
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert "runpod_key_set" in body
+
+
+def test_health_reports_the_runpod_key_as_a_boolean_never_the_key(client, monkeypatch):
+    monkeypatch.setenv("RUNPOD_API_KEY", "rpa_" + "S3cr3tValue" * 4)
+    body = client.get("/health").json()
+    assert body["runpod_key_set"] is True
+    assert "S3cr3tValue" not in client.get("/health").text
+
+
+def test_health_status_is_degraded_when_the_endpoint_is_down(client, monkeypatch):
+    import vault.web
+
+    class Dead:
+        def health(self):
+            return {"ok": False, "detail": "no workers"}
+
+    monkeypatch.setattr(vault.web, "_build_provider", lambda: Dead())
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json()["status"] == "degraded"
