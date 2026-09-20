@@ -203,7 +203,9 @@ Results are written to `eval/results.md` on every run.
 ## Team
 
 - Mubashir Panjwani
-- Add teammates here
+- Muhammad Rohan Khan
+- Ibrahim Raheel
+
 
 ## License
 
