@@ -27,12 +27,12 @@ import os
 import sqlite3
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from vault import __version__ as VAULT_VERSION
-from vault import db, mirror
+from vault import db, mcp_http, mirror
 from vault.cli import DEFAULT_BUDGET, _build_provider, _mirror_touched, _run_ask
 from vault.extract import extract
 from vault.providers.base import ProviderError
@@ -231,6 +231,55 @@ def catalog() -> JSONResponse:
         return JSONResponse({"entities": entities, "facts": facts})
     finally:
         conn.close()
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Request):
+    """MCP over HTTP, so a hosted Claude or OpenAI client can use this store.
+
+    DEVIATION from PRD 7.3, which fixes five routes -- recorded in
+    PROGRESS.md. The four tools are already specified in 7.2; this is a
+    second transport for them, not new capability. Protocol detail lives in
+    mcp_http.py so this file stays a thin FastAPI shell.
+    """
+    if not mcp_http.authorised(request.headers.get("authorization")):
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32001, "message": "unauthorised: send Authorization: Bearer"},
+            },
+            status_code=401,
+        )
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - a malformed body is a protocol error
+        return JSONResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": "parse error: body is not JSON"},
+            },
+            status_code=400,
+        )
+
+    response, status = mcp_http.handle(body, project_dir(), VAULT_VERSION)
+    if response is None:
+        return Response(status_code=status)
+    return JSONResponse(response, status_code=status)
+
+
+@app.get("/mcp")
+def mcp_describe() -> JSONResponse:
+    """Clients and humans probe with GET; say what this is rather than 405."""
+    return JSONResponse(
+        {
+            "transport": "streamable-http (JSON-RPC 2.0 over POST)",
+            "protocolVersion": mcp_http.PROTOCOL_VERSION,
+            "tools": [t["name"] for t in mcp_http.tool_schemas()],
+            "auth": "bearer" if os.environ.get("VAULT_MCP_TOKEN") else "none",
+        }
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
