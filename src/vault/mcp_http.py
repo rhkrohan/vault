@@ -21,6 +21,7 @@ argument instead.
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 from pathlib import Path
@@ -55,7 +56,12 @@ def authorised(auth_header: str | None) -> bool:
     if not token:
         return True
     header = (auth_header or "").strip()
-    return header.startswith("Bearer ") and header[7:].strip() == token
+    if not header.startswith("Bearer "):
+        return False
+    # compare_digest, not ==: a plain string compare returns as soon as two
+    # bytes differ, so response time leaks how much of the token a caller
+    # guessed correctly and the secret can be recovered a character at a time.
+    return hmac.compare_digest(header[7:].strip(), token)
 
 
 # ---------------------------------------------------------------------------
