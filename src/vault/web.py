@@ -201,9 +201,34 @@ def audit(limit: int = 50) -> JSONResponse:
 
 @app.get("/catalog")
 def catalog() -> JSONResponse:
+    """Entities plus their facts, so the dashboard can draw the memory graph.
+
+    Not one of PRD 7.3's five fixed routes -- this is the read the inline page
+    uses to render. Facts carry ``current`` rather than the raw
+    ``superseded_by`` id so the browser never has to resolve a join, and
+    superseded rows are included on purpose: the graph shows what a decision
+    replaced, which is the whole point of the supersession rule.
+    """
     conn = db.connect()
     try:
-        return JSONResponse({"entities": [dict(row) for row in db.list_entities(conn)]})
+        entities = [dict(row) for row in db.list_entities(conn)]
+        names = {e["id"]: e["name"] for e in entities}
+        rows = conn.execute(
+            "SELECT id, entity_id, predicate, value, category, sensitive, "
+            "superseded_by, observed_at FROM facts ORDER BY id"
+        ).fetchall()
+        facts = [
+            {
+                "entity": names.get(r["entity_id"], "?"),
+                "predicate": r["predicate"],
+                "value": r["value"],
+                "category": r["category"],
+                "sensitive": bool(r["sensitive"]),
+                "current": r["superseded_by"] is None,
+            }
+            for r in rows
+        ]
+        return JSONResponse({"entities": entities, "facts": facts})
     finally:
         conn.close()
 
@@ -223,55 +248,91 @@ PAGE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vault</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Serif:wght@600&amp;display=swap">
 <style>
   :root {
-    --bg: #fbfaf8; --panel: #fff; --ink: #1a1a1a; --muted: #6b6b6b;
-    --line: #e4e1dc; --accent: #4338ca; --ok: #0f7b4f; --bad: #b3261e;
-    --code-bg: #f4f2ef;
+    --bg:#F4F6F4; --panel:#fff; --sunk:#EDF0EC;
+    --ink:#101619; --ink-2:#3C474D; --muted:#6A767C;
+    --line:#DBE0DA; --line-2:#C4CBC2;
+    /* categorical palette, validated in both modes: worst adjacent dE 19.6 */
+    --d0:#00968A; --d1:#C77A07; --d2:#4C6FD4; --d3:#B5439C;
+    --accent:#00968A; --ok:#00968A; --bad:#B3261E; --past:#8A9298;
+    --stage:#090E11; --code-bg:#090E11;
+    --sans:"IBM Plex Sans",ui-sans-serif,-apple-system,"Segoe UI",sans-serif;
+    --serif:"IBM Plex Serif",ui-serif,Georgia,serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #17181a; --panel: #1f2023; --ink: #ececec; --muted: #a0a0a0;
-      --line: #333438; --accent: #a5b4fc; --ok: #4ade80; --bad: #f87171;
-      --code-bg: #141517;
+      --bg:#0B1013; --panel:#141C20; --sunk:#101A1E;
+      --ink:#E9EDE9; --ink-2:#AFBABD; --muted:#7D898D;
+      --line:#233036; --line-2:#324047;
+      --d0:#2AA79C; --d1:#C0872A; --d2:#6A88D8; --d3:#BC5FA6;
+      --accent:#2AA79C; --ok:#2AA79C; --bad:#F87171; --past:#6B767C;
     }
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
-  header { margin-bottom: 8px; }
-  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.02em; }
-  .sub { color: var(--muted); margin: 0 0 24px; }
-  section {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 20px; margin-bottom: 18px;
-  }
-  h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em;
-       margin: 0 0 4px; color: var(--muted); }
-  .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
-  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
-  textarea, input, select {
-    width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px;
-    background: var(--bg); color: var(--ink); font: inherit;
-  }
-  textarea { min-height: 120px; resize: vertical; font-size: 13px;
-             font-family: ui-monospace, monospace; }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .row > div { flex: 1 1 160px; }
-  button {
-    margin-top: 14px; padding: 9px 18px; border: 0; border-radius: 7px;
-    background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer;
-  }
-  @media (prefers-color-scheme: dark) { button { color: #17181a; } }
-  button:disabled { opacity: .55; cursor: progress; }
-  .status { margin-top: 12px; font-size: 14px; min-height: 20px; }
-  .status.busy { color: var(--muted); }
-  .status.ok { color: var(--ok); }
-  .status.bad { color: var(--bad); }
-  pre {
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1060px; margin:0 auto; padding:30px 18px 60px; }
+  header { border-bottom:2px solid var(--ink); padding-bottom:12px; margin-bottom:18px; }
+  .eyebrow { font-family:var(--mono); font-size:10.5px; letter-spacing:.15em;
+             text-transform:uppercase; color:var(--muted); }
+  h1 { font-family:var(--serif); font-size:clamp(26px,4.4vw,36px); margin:.2em 0 0;
+       letter-spacing:-.015em; line-height:1.07; }
+  .sub { color:var(--ink-2); margin:9px 0 0; max-width:60ch; }
+
+  .hero { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line);
+          border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-bottom:18px; }
+  .hcell { background:var(--panel); padding:11px 13px; }
+  .hcell .k { font-family:var(--mono); font-size:9.5px; letter-spacing:.11em;
+              text-transform:uppercase; color:var(--muted); }
+  .hcell .v { font-family:var(--mono); font-size:clamp(20px,3vw,26px); font-weight:600;
+              font-variant-numeric:tabular-nums; margin-top:2px; }
+  .hcell.on .v { color:var(--accent); } .hcell.old .v { color:var(--past); }
+
+  .stagewrap { margin-bottom:16px; }
+  @media (max-width:880px){ .hero{grid-template-columns:repeat(2,1fr)} }
+
+  .stage { position:relative; border-radius:11px; overflow:hidden; background:var(--stage);
+           border:1px solid #1B252B; aspect-ratio:16/9; }
+  .stage canvas { display:block; width:100%; height:100%; }
+  .slab { position:absolute; left:12px; top:10px; font-family:var(--mono); font-size:10px;
+          letter-spacing:.14em; text-transform:uppercase; color:#5A686E; pointer-events:none; }
+  .lg { position:absolute; right:11px; top:10px; display:flex; flex-direction:column; gap:4px;
+        font-family:var(--mono); font-size:10px; color:#93A0A5; pointer-events:none;
+        text-align:right; }
+  .lg span { display:flex; align-items:center; gap:5px; justify-content:flex-end; }
+  .lg i { width:8px; height:8px; border-radius:2px; }
+  .empty[hidden] { display:none; }
+  .empty { position:absolute; inset:0; display:flex; align-items:center;
+           justify-content:center;
+           color:#5A686E; font-family:var(--mono); font-size:12px; text-align:center; padding:20px;
+           }
+
+  section { background:var(--panel); border:1px solid var(--line); border-radius:11px;
+            padding:17px 18px; margin-bottom:16px; }
+  h2 { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.14em;
+       margin:0 0 4px; color:var(--muted); font-weight:500; }
+  .hint { color:var(--ink-2); font-size:13px; margin:0 0 12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px;
+          font-family:var(--mono); letter-spacing:.04em; }
+  textarea, input, select { width:100%; padding:9px 11px; border:1px solid var(--line-2);
+    border-radius:7px; background:var(--bg); color:var(--ink); font:inherit; }
+  textarea { min-height:112px; resize:vertical; font-size:12.5px; font-family:var(--mono); }
+  input:focus, textarea:focus, select:focus { outline:2px solid var(--accent); outline-offset:1px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1 1 160px; }
+  button { margin-top:13px; padding:9px 18px; border:0; border-radius:7px; background:var(--ink);
+           color:var(--bg); font:inherit; font-weight:600; cursor:pointer; }
+  button:hover { opacity:.88; }
+  button:disabled { opacity:.5; cursor:progress; }
+  .status { margin-top:11px; font-size:13.5px; min-height:19px; }
+  .status.busy { color:var(--muted); } .status.ok { color:var(--ok);
+  } .status.bad { color:var(--bad); }
+  pre { background:var(--code-bg); color:#DCE4E3; border:1px solid #1B252B; border-radius:8px;
     background: var(--code-bg); border: 1px solid var(--line); border-radius: 7px;
     padding: 14px; overflow-x: auto; font-size: 13px; white-space: pre-wrap;
     word-break: break-word; margin: 12px 0 0;
@@ -288,10 +349,37 @@ PAGE = """<!doctype html>
 <body>
 <div class="wrap">
   <header>
-    <h1>Vault</h1>
-    <p class="sub">Memory that follows you across models. Feed it a
-       conversation, then ask it what you decided.</p>
+    <span class="eyebrow" id="eyebrow">Vault Librarian</span>
+    <h1>Memory that follows you across models</h1>
+    <p class="sub">Feed it a conversation. It scrubs secrets, keeps what is
+       durable, supersedes what changed &mdash; and hands the next agent only
+       the slice that answers the question.</p>
   </header>
+
+  <div class="hero">
+    <div class="hcell on"><div class="k">Facts held</div>
+      <div class="v" id="m-held">&mdash;</div></div>
+    <div class="hcell old"><div class="k">Superseded</div>
+      <div class="v" id="m-sup">&mdash;</div></div>
+    <div class="hcell"><div class="k">Entities</div><div class="v" id="m-ent">&mdash;</div></div>
+    <div class="hcell"><div class="k">Last block</div><div class="v" id="m-tok">&mdash;</div></div>
+  </div>
+
+  <div class="stagewrap">
+    <div class="stage" id="stage">
+      <canvas id="graph"></canvas>
+      <div class="slab">Memory graph</div>
+      <div class="lg">
+        <span><i style="background:var(--d0)"></i>projects</span>
+        <span><i style="background:var(--d1)"></i>work &amp; people</span>
+        <span><i style="background:var(--d2)"></i>personal</span>
+        <span><i style="background:var(--d3)"></i>health &amp; money</span>
+        <span><i style="background:var(--past)"></i>superseded</span>
+      </div>
+      <div class="empty" id="graph-empty">Nothing stored yet &mdash;<br>add a conversation 
+      elow.</div>
+    </div>
+  </div>
 
   <section>
     <h2>1 &middot; Add a conversation</h2>
@@ -432,7 +520,8 @@ $("ask-form").addEventListener("submit", (event) => {
 
 async function loadCatalog() {
   try {
-    const { entities } = await (await fetch("/catalog")).json();
+    const { entities, facts } = await (await fetch("/catalog")).json();
+    drawGraph(entities, facts || []);
     const select = $("ask-scope");
     const current = select.value;
     select.innerHTML = '<option value="">auto-detect</option>';
@@ -477,6 +566,131 @@ async function loadHealth() {
     $("health").textContent = "Status unavailable: " + err.message;
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// The memory graph. Deterministic radial layout, not a force simulation: the
+// labels have to stay readable on a projector, and a force layout piles the
+// nodes into the middle and collides their text.
+// ---------------------------------------------------------------------------
+const CATEGORY_BRANCH = {
+  projects: 0, work_school: 1, people: 1, interests: 2, personal: 2,
+  finances: 3, health: 3,
+};
+const BRANCH_NAMES = ["projects", "work & people", "personal", "health & money"];
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function drawGraph(entities, facts) {
+  const stage = $("stage"), cv = $("graph");
+  if (!stage || !cv) return;
+  const empty = $("graph-empty");
+  if (empty) empty.hidden = entities.length > 0;
+  if (!entities.length) { const c = cv.getContext("2d"); c.clearRect(0,0,cv.width,cv.height);
+  return; }
+
+  const rect = stage.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = rect.width, H = rect.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+
+  const COL = [cssVar("--d0"), cssVar("--d1"), cssVar("--d2"), cssVar("--d3")];
+  const PAST = cssVar("--past");
+  const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2;
+  const hubR = R * 0.26, entR = R * 0.56, leafR = R * 0.84;
+
+  const branchOf = (cat) => CATEGORY_BRANCH[cat] ?? 0;
+  const byBranch = [[], [], [], []];
+  for (const e of entities) byBranch[branchOf(e.category)].push(e);
+
+  const factsFor = (name) => facts.filter((f) => f.entity === name);
+  const placed = [];
+
+  // Give each branch a slice of the full circle proportional to how many
+  // entities it holds, rather than a fixed quadrant. Real stores are lopsided
+  // -- most of this one is "projects" -- and fixed quadrants crush the big
+  // branch into 90 degrees where the labels overlap into mush.
+  const total = entities.length || 1;
+  const GAP = 0.12;                        // radians of breathing room per branch
+  const live = [0, 1, 2, 3].filter((b) => byBranch[b].length);
+  let cursor = -Math.PI / 2;
+
+  for (const b of live) {
+    const mine = byBranch[b];
+    const slice = (Math.PI * 2 * mine.length) / total;
+    const span = Math.max(slice - GAP, 0.05);
+    const mid = cursor + slice / 2;
+    cursor += slice;
+    const a0 = mid;
+    const hx = cx + Math.cos(a0) * hubR, hy = cy + Math.sin(a0) * hubR;
+
+    ctx.strokeStyle = COL[b] + "66"; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(hx, hy); ctx.stroke();
+
+    mine.forEach((e, i) => {
+      const a = a0 - span / 2 + (mine.length === 1 ? span / 2 : (span * i) / (mine.length - 1));
+      const ex = cx + Math.cos(a) * entR, ey = cy + Math.sin(a) * entR;
+      ctx.strokeStyle = COL[b] + "4D"; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo((hx + ex) / 2, (hy + ey) / 2, ex, ey); ctx.stroke();
+
+      const fs = factsFor(e.name);
+      const fspan = (span / Math.max(mine.length, 1)) * 0.9;
+      fs.forEach((f, q) => {
+        const fa = a - fspan / 2 + (fs.length === 1 ? fspan / 2 : (fspan * q) / (fs.length - 1));
+        const fx = cx + Math.cos(fa) * leafR, fy = cy + Math.sin(fa) * leafR;
+        ctx.strokeStyle = f.current ? COL[b] + "3A" : PAST + "2E"; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(fx, fy); ctx.stroke();
+        ctx.fillStyle = f.current ? COL[b] : PAST;
+        ctx.globalAlpha = f.current ? 1 : 0.5;
+        ctx.beginPath(); ctx.arc(fx, fy, f.sensitive ? 4.4 : 3.4, 0, 7); ctx.fill();
+        if (f.sensitive && f.current) {
+          ctx.globalAlpha = 1; ctx.strokeStyle = COL[b]; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(fx, fy, 7.2, 0, 7); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      });
+      placed.push({ name: e.name, x: ex, y: ey, b, flip: Math.cos(a) < 0 });
+    });
+
+    if (mine.length) {
+      ctx.fillStyle = COL[b];
+      ctx.beginPath(); ctx.arc(hx, hy, 5, 0, 7); ctx.fill();
+      ctx.font = "600 10px " + cssVar("--mono");
+      ctx.textAlign = "center";
+      ctx.fillText(BRANCH_NAMES[b].toUpperCase(), hx, hy - 10);
+    }
+  }
+
+  for (const n of placed) {
+    ctx.fillStyle = "#0D1418"; ctx.strokeStyle = COL[n.b]; ctx.lineWidth = 1.7;
+    ctx.beginPath(); ctx.arc(n.x, n.y, 6.5, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#C8D4D6"; ctx.font = "500 10.5px " + cssVar("--sans");
+    ctx.textAlign = n.flip ? "right" : "left";
+    ctx.fillText(n.name, n.x + (n.flip ? -10 : 10), n.y + 3.3);
+  }
+
+  ctx.fillStyle = "#E9EDE9";
+  ctx.beginPath(); ctx.arc(cx, cy, 10, 0, 7); ctx.fill();
+  ctx.fillStyle = "#090E11"; ctx.font = "600 9.5px " + cssVar("--sans");
+  ctx.textAlign = "center"; ctx.fillText("YOU", cx, cy + 3.2);
+
+  const held = facts.filter((f) => f.current).length;
+  $("m-held").textContent = held;
+  $("m-sup").textContent = facts.length - held;
+  $("m-ent").textContent = entities.length;
+}
+
+let graphTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(graphTimer);
+  graphTimer = setTimeout(loadCatalog, 180);
+});
 
 loadCatalog(); loadAudit(); loadHealth();
 </script>
