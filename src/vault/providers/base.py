@@ -102,6 +102,17 @@ conversation verbatim and never include secrets (API keys, passwords, full \
 card or account numbers).
 - "entity" is the project, person, or topic the fact belongs to; reuse the \
 same entity name for the same thing across facts.
+- "predicate" is the ATTRIBUTE NAME ALONE: a short noun phrase, lowercase, \
+never a verb and never a sentence. The chosen option goes in "value". The \
+same attribute must get the same predicate every time it appears, in this \
+conversation or any other, so that a later decision about that attribute \
+replaces the earlier one instead of sitting beside it. Prefer these names \
+when they fit: auth, database, hosting, framework, language, deploy, team, \
+role, employer, title, status, deadline, budget, rent, sleep, exercise, \
+diet, location.
+  correct:   {{"predicate": "auth", "value": "Clerk"}}
+  incorrect: {{"predicate": "uses", "value": "Clerk for auth"}}
+  incorrect: {{"predicate": "auth method", "value": "hand-rolled sessions"}}
 - category is one of: projects, work_school, people, interests, personal, \
 finances, health. Mark sensitive=true for anything in finances or health.
 - If nothing durable is in the conversation, return \
